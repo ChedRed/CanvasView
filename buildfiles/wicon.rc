@@ -1,0 +1,12 @@
+WICON ICON DISCARDABLE "icon.ico"
+
+1 VERSIONINFO
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904E4"
+        BEGIN
+            VALUE "FileDescription", "RePiskel"
+        END
+    END
+END
