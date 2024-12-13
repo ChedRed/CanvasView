@@ -9,11 +9,15 @@
 #include "TextHelp.h"
 
 
+std::string cmdprefix = "";
+
+
 #undef min
 #undef max
 #define elif else if
 #ifdef _WIN32
 #define SDL_MODKEY SDL_SCANCODE_LCTRL
+cmdprefix = "cmd /C ";
 #elifdef __APPLE__
 #define SDL_MODKEY SDL_SCANCODE_LGUI
 #endif
@@ -38,10 +42,9 @@ std::string key = "4613~JW2h7AZXUK6LBkEnKxtPtmrJ22cUeUVGyfYCUhnuNNKat46nVAVN9ufU
 std::string CourseBase = "https://creanlutheran.instructure.com/api/v1/"; // conversations, courses
 
 
-std::atomic_int stage;
 std::atomic_int writing = -1;
 std::atomic_bool live;
-int tcount = 4;
+const int tcount = 3;
 
 
 float deltime = 0;
@@ -134,7 +137,6 @@ item ToItem(std::string value){
             name = split(returnv[i], ":", 1)[1];
         }
     }
-    std::cout << name << ", " << id << std::endl;
     return {name, id};
 }
 
@@ -157,7 +159,7 @@ course ToCourse(std::string value){
 
 
 void FirStage(){
-    std::string value = splice(command(("cmd /C curl --no-progress-meter -H 'Authorization: Bearer " + key + "' " + CourseBase + "courses").c_str()), 1, 1);
+    std::string value = splice(command((cmdprefix + "curl --no-progress-meter -H 'Authorization: Bearer " + key + "' " + CourseBase + "courses").c_str()), 1, 1);
     std::vector<std::string> RawCourses;
     std::string add;
     int depth = 0;
@@ -174,20 +176,19 @@ void FirStage(){
     for (int i = 0; i < RawCourses.size(); i++){
         courses.push_back(ToCourse(RawCourses[i]));
     }
-
-    stage.fetch_add(1);
 }
 
 
 void SecondStage(int course, int thread){
-    int page = 0;
+    int page = 1;
     std::string value = "";
     while (true){
-        std::string next = splice(command(("cmd /C curl --no-progress-meter -H 'Authorization: Bearer " + key + "' " + CourseBase + "courses/" + std::to_string(course) + "/assignments?page=" + std::to_string(page) + "").c_str()), 1, 1);
+        std::string next = splice(command((cmdprefix + "curl --no-progress-meter -H 'Authorization: Bearer " + key + "' " + CourseBase + "courses/" + std::to_string(course) + "/assignments?page=" + std::to_string(page) + "").c_str()), 1, 1);
+
         if (next == ""){
             break;
         }
-        if (page == 0){
+        if (page == 1){
             value = next;
         }
         else{
@@ -195,7 +196,6 @@ void SecondStage(int course, int thread){
         }
         page++;
     }
-
     std::vector<std::string> RawAssignments;
     std::string add;
     int depth = 0;
@@ -223,8 +223,6 @@ void SecondStage(int course, int thread){
     items.push_back(courseitems);
     std::cout << courseitems.size() << " items in course " << course << std::endl;
     writing.store(-1);
-
-    stage.fetch_add(1);
 }
 
 
@@ -257,6 +255,8 @@ void CanvasThread(){
             std::cout << "Joined thread " + std::to_string(i) << std::endl;
         }
     }
+    std::cout << "Collected all assignments" << std::endl;
+
     while (loop.load()){
 
     }
@@ -301,7 +301,7 @@ int main(int argc, char* argv[]) {
 
     /* Init text assistant :) */
     TextCharacters Characters = {renderer, font, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890,.~!@#$%^&*()_+-=:;\"'? "};
-    TextObject Title = {"", Center, Center, Vector2(windowsize.x/2, windowsize.y/2), {(Uint8)(255*darkmode), (Uint8)(255*darkmode), (Uint8)(255*darkmode), 255}, true};
+    TextObject Title = {"", Center, Center, Vector2((float)windowsize.x/2, (float)windowsize.y/2), {(Uint8)(255*darkmode), (Uint8)(255*darkmode), (Uint8)(255*darkmode), 255}, true};
 
 
     std::thread canvas = std::thread(CanvasThread);
