@@ -25,7 +25,7 @@ iVector2 windowsize = {960, 540};
 
 
 SDL_Event e;
-bool loop = true;
+std::atomic_bool loop = true;
 bool focus = true;
 Vector2 mouse;
 const bool * keystates = SDL_GetKeyboardState(NULL);
@@ -39,6 +39,8 @@ std::string CourseBase = "https://creanlutheran.instructure.com/api/v1/"; // con
 
 
 std::atomic_int stage;
+std::atomic_int writing = -1;
+std::atomic_bool live;
 int tcount = 4;
 
 
@@ -77,17 +79,20 @@ std::string command(const char * cmd){
 }
 
 
-std::vector<std::string> split(std::string value, std::string key){
+std::vector<std::string> split(std::string value, std::string key, int limit = 0){
     std::string check;
     std::string add;
     std::vector<std::string> returnv;
+    int left = limit;
+    bool uselimit = left < 1;
     for (int i = 0; i < value.length(); i++){
-        if (key.contains(value[i])){
+        if (key.contains(value[i]) && ((uselimit)?(limit > 0):true)){
             check += value[i];
         }
         else{
             add += check + value[i];
             check = "";
+            limit--;
         }
         if (check == key){
             returnv.push_back(add);
@@ -109,6 +114,31 @@ std::string splice(std::string value, int start, int end){
 }
 
 
+item ToItem(std::string value){
+    std::vector<std::string> returnv;
+    std::string add;
+    int depth = 0;
+    for (int i = 0; i < value.length(); i++){
+        if (std::string("([{").contains(value[i])) depth++;
+        elif (std::string(")]}").contains(value[i])) depth--;
+        elif (depth == 0 && std::string(",").contains(value[i])){
+            returnv.push_back(add);
+            add = "";
+        }
+        else add += value[i];
+    }
+    int id = std::stoi(split(returnv[0], ":", 1)[1]);
+    std::string name;
+    for (int i = 0; i < returnv.size(); i++){
+        if (split(returnv[i], ":", 1)[0] == "\"name\""){
+            name = split(returnv[i], ":", 1)[1];
+        }
+    }
+    std::cout << name << ", " << id << std::endl;
+    return {name, id};
+}
+
+
 course ToCourse(std::string value){
     std::vector<std::string> returnv;
     std::string add;
@@ -122,12 +152,12 @@ course ToCourse(std::string value){
         }
         else add += value[i];
     }
-    return {split(returnv[1], ":")[1], std::stoi(split(returnv[0], ":")[1])};
+    return {split(returnv[1], ":", 1)[1], std::stoi(split(returnv[0], ":", 1)[1])};
 }
 
 
 void FirStage(){
-    std::string value = splice(command(("curl -H 'Authorization: Bearer " + key + "' " + CourseBase + "courses").c_str()), 2, 2);
+    std::string value = splice(command(("cmd /C curl --no-progress-meter -H 'Authorization: Bearer " + key + "' " + CourseBase + "courses").c_str()), 1, 1);
     std::vector<std::string> RawCourses;
     std::string add;
     int depth = 0;
@@ -142,18 +172,96 @@ void FirStage(){
     }
 
     for (int i = 0; i < RawCourses.size(); i++){
-        std::cout << RawCourses[i] << std::endl;
         courses.push_back(ToCourse(RawCourses[i]));
     }
 
-    stage.store(1);
-}
-
-
-void SecondStage(int i){
-    std::cout << command(("curl -H 'Authorization: Bearer " + key + "' " + CourseBase + "courses/" + std::to_string(i) + "/modules").c_str()) << std::endl;
     stage.fetch_add(1);
 }
+
+
+void SecondStage(int course, int thread){
+    int page = 0;
+    std::string value = "";
+    while (true){
+        std::string next = splice(command(("cmd /C curl --no-progress-meter -H 'Authorization: Bearer " + key + "' " + CourseBase + "courses/" + std::to_string(course) + "/assignments?page=" + std::to_string(page) + "").c_str()), 1, 1);
+        if (next == ""){
+            break;
+        }
+        if (page == 0){
+            value = next;
+        }
+        else{
+            value += ","+next;
+        }
+        page++;
+    }
+
+    std::vector<std::string> RawAssignments;
+    std::string add;
+    int depth = 0;
+    for (int i = 0; i < value.length(); i++){
+        if (std::string("([{").contains(value[i])) depth++;
+        elif (std::string(")]}").contains(value[i])) depth--;
+        elif (depth == 0 && std::string(",").contains(value[i])){
+            RawAssignments.push_back(add);
+            add = "";
+        }
+        else add += value[i];
+    }
+
+
+    std::vector<item> courseitems;
+    for (int i = 0; i < RawAssignments.size(); i++){
+        courseitems.push_back(ToItem(RawAssignments[i]));
+    }
+    while (true){
+        if (writing.load() == -1){
+            writing.store(thread);
+            break;
+        }
+    }
+    items.push_back(courseitems);
+    std::cout << courseitems.size() << " items in course " << course << std::endl;
+    writing.store(-1);
+
+    stage.fetch_add(1);
+}
+
+
+void CanvasThread(){
+    FirStage();
+    std::cout << "Collected all courses" << std::endl;
+    std::thread threads[tcount];
+    std::atomic_bool tactive[tcount] = {false};
+    std::vector<int> ids;
+    for (int i = 0; i < courses.size(); i++){
+        ids.push_back(courses[i].id);
+    }
+    std::cout << "Number of IDs: " + std::to_string(ids.size()) << std::endl;
+    while (ids.size() > 0){
+        for (int i = 0; i < tcount; i++){
+            if (threads[i].joinable()){
+                threads[i].join();
+                std::cout << "Joined thread " + std::to_string(i) << std::endl;
+            }
+            if (ids.size() > 0){
+                threads[i] = std::thread(SecondStage, ids[0], i);
+                std::cout << "Started thread " + std::to_string(i) + " on assignments for " + std::to_string(ids[0]) << std::endl;
+                ids.erase(ids.begin());
+            }
+        }
+    }
+    for (int i = 0; i < tcount; i++){
+        if (threads[i].joinable()){
+            threads[i].join();
+            std::cout << "Joined thread " + std::to_string(i) << std::endl;
+        }
+    }
+    while (loop.load()){
+
+    }
+}
+
 
 
 /* Main! */
@@ -196,28 +304,16 @@ int main(int argc, char* argv[]) {
     TextObject Title = {"", Center, Center, Vector2(windowsize.x/2, windowsize.y/2), {(Uint8)(255*darkmode), (Uint8)(255*darkmode), (Uint8)(255*darkmode), 255}, true};
 
 
-    std::thread threads[tcount];
-    threads[0] = std::thread(FirStage);
+    std::thread canvas = std::thread(CanvasThread);
 
 
     /* Main loop */
-    while (loop){
+    while (loop.load()){
+
+
         /* Get mouse pos and get FPS */
         deltime = (SDL_GetPerformanceCounter() - then) / (double)SDL_GetPerformanceFrequency();
         then = SDL_GetPerformanceCounter();
-
-
-        if (stage.load() == 1){
-            threads[0].join();
-            std::cout << "Got all courses" << std::endl;
-            stage.store(2);
-        }
-        elif (stage.load() == 2){
-            stage.fetch_add(1);
-            // for (int i = 0; i < tcount; i++){
-            //     threads[i] = std::thread(SecondStage, i);
-            // }
-        }
 
 
         /* Update mouse and input text */
@@ -229,7 +325,7 @@ int main(int argc, char* argv[]) {
         while (SDL_PollEvent(&e)){
             switch (e.type) {
                 case SDL_EVENT_QUIT:
-                    loop = false;
+                    loop.store(false);
                     break;
 
 
@@ -322,6 +418,7 @@ int main(int argc, char* argv[]) {
     SDL_StopTextInput(window);
     SDL_DestroyWindow(window);
     SDL_Quit();
+    canvas.join();
     return 0;
 }
 
