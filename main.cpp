@@ -17,7 +17,6 @@ std::string cmdprefix = "";
 #define elif else if
 #ifdef _WIN32
 #define SDL_MODKEY SDL_SCANCODE_LCTRL
-cmdprefix = "cmd /C ";
 #elifdef __APPLE__
 #define SDL_MODKEY SDL_SCANCODE_LGUI
 #endif
@@ -271,6 +270,7 @@ int main(int argc, char* argv[]) {
     /* Set os variable */
     #ifdef _WIN32
     os = 1;
+    cmdprefix = "cmd /C ";
     #elifdef __APPLE__
     os = 2;
     #elifdef __linux__
@@ -292,6 +292,10 @@ int main(int argc, char* argv[]) {
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_StartTextInput(window);
     std::cout << "Successfully initialized SDL3" << std::endl;
+
+
+    /* Create textures */
+    SDL_Texture * Corner = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, 4, 4);
 
 
     /* Initialize SDL_ttf, create font object */
