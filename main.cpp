@@ -28,6 +28,7 @@ std::string cmdprefix = "";
 
 int os = 0;
 std::string rpath;
+std::string homedir;
 std::string mainpath;
 iVector2 windowsize = {960, 540};
 
@@ -314,11 +315,11 @@ int main(int argc, char* argv[]) {
     SDL_SetRenderTarget(renderer, Corner);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
     SDL_RenderClear(renderer);
-    Vector2 CenterOf = {borderscale, borderscale};
+    Vector2 CenterOf = {(float)borderscale, (float)borderscale};
     Vector2 Pos;
     for (int y = 0; y < borderscale; y++){
         for (int x = 0; x < borderscale; x++){
-            Pos = {x, y};
+            Pos = {(float)x, (float)y};
             if ((CenterOf-Pos).Magnitude() <= borderscale+1){
                 SDL_SetRenderDrawColor(renderer, MainColor.r, MainColor.g, MainColor.b, (Uint8)limit((borderscale-(CenterOf-Pos).Magnitude()+1)*255, 0, 255));
                 SDL_RenderPoint(renderer, x, y);
@@ -331,7 +332,7 @@ int main(int argc, char* argv[]) {
     SDL_RenderClear(renderer);
     for (int y = 0; y < borderscale; y++){
         for (int x = 0; x < borderscale; x++){
-            Pos = {x, y};
+            Pos = {(float)x, (float)y};
             if ((CenterOf-Pos).Magnitude() > borderscale){
                 SDL_SetRenderDrawColor(renderer, MainColor.r, MainColor.g, MainColor.b, (Uint8)limit(((CenterOf-Pos).Magnitude()-borderscale)*255, 0, 255));
                 SDL_RenderPoint(renderer, x, y);
@@ -383,8 +384,8 @@ int main(int argc, char* argv[]) {
                 /* Resize window */
                 case SDL_EVENT_WINDOW_RESIZED:
                     SDL_GetWindowSize(window, &windowsize.x, &windowsize.y);
-                    Title.Position = {windowsize.x/2, windowsize.y/2};
-                    Intro.Position = {windowsize.x/2, windowsize.y/2};
+                    Title.Position = {(float)windowsize.x/2, (float)windowsize.y/2};
+                    Intro.Position = {(float)windowsize.x/2, (float)windowsize.y/2};
 
 
                 /* Reduce FPS if unfocussed */
@@ -456,32 +457,32 @@ int main(int argc, char* argv[]) {
 
         Title.Render(renderer, deltime);
         Intro.Render(renderer);
-        SDL_FRect temprect = {borderscale, borderscale, borderscale, borderscale};
+        SDL_FRect temprect = {(float)borderscale, (float)borderscale, (float)borderscale, (float)borderscale};
         SDL_RenderTextureRotated(renderer, Corner, NULL, &temprect, 0, NULL, SDL_FLIP_NONE);
-        temprect = {borderscale * 2, borderscale * 2, borderscale, borderscale};
+        temprect = {(float)borderscale * 2, (float)borderscale * 2, (float)borderscale, (float)borderscale};
         SDL_RenderTextureRotated(renderer, InvertedCorner, NULL, &temprect, 0, NULL, SDL_FLIP_NONE);
-        temprect = (SDL_FRect){windowsize.x - (borderscale * 2), borderscale, borderscale, borderscale};
+        temprect = (SDL_FRect){windowsize.x - ((float)borderscale * 2), (float)borderscale, (float)borderscale, (float)borderscale};
         SDL_RenderTextureRotated(renderer, Corner, NULL, &temprect, 90, NULL, SDL_FLIP_NONE);
-        temprect = (SDL_FRect){windowsize.x - (borderscale * 3), borderscale * 2, borderscale, borderscale};
+        temprect = (SDL_FRect){windowsize.x - ((float)borderscale * 3), (float)borderscale * 2, (float)borderscale, (float)borderscale};
         SDL_RenderTextureRotated(renderer, InvertedCorner, NULL, &temprect, 90, NULL, SDL_FLIP_NONE);
-        temprect = (SDL_FRect){windowsize.x - (borderscale * 2), windowsize.y - (borderscale * 2), borderscale, borderscale};
+        temprect = (SDL_FRect){windowsize.x - ((float)borderscale * 2), windowsize.y - ((float)borderscale * 2), (float)borderscale, (float)borderscale};
         SDL_RenderTextureRotated(renderer, Corner, NULL, &temprect, 180, NULL, SDL_FLIP_NONE);
-        temprect = (SDL_FRect){windowsize.x - (borderscale * 3), windowsize.y - (borderscale * 3), borderscale, borderscale};
+        temprect = (SDL_FRect){windowsize.x - ((float)borderscale * 3), windowsize.y - ((float)borderscale * 3), (float)borderscale, (float)borderscale};
         SDL_RenderTextureRotated(renderer, InvertedCorner, NULL, &temprect, 180, NULL, SDL_FLIP_NONE);
-        temprect = (SDL_FRect){borderscale, windowsize.y - (borderscale * 2), borderscale, borderscale};
+        temprect = (SDL_FRect){(float)borderscale, windowsize.y - ((float)borderscale * 2), (float)borderscale, (float)borderscale};
         SDL_RenderTextureRotated(renderer, Corner, NULL, &temprect, 270, NULL, SDL_FLIP_NONE);
-        temprect = (SDL_FRect){borderscale * 2, windowsize.y - (borderscale * 3), borderscale, borderscale};
+        temprect = (SDL_FRect){(float)borderscale * 2, windowsize.y - ((float)borderscale * 3), (float)borderscale, (float)borderscale};
         SDL_RenderTextureRotated(renderer, InvertedCorner, NULL, &temprect, 270, NULL, SDL_FLIP_NONE);
 
 
         SDL_SetRenderDrawColor(renderer, MainColor.r, MainColor.g, MainColor.b, MainColor.a);
-        temprect = (SDL_FRect){borderscale * 2, borderscale, windowsize.x - (borderscale * 4), borderscale};
+        temprect = (SDL_FRect){(float)borderscale * 2, (float)borderscale, windowsize.x - ((float)borderscale * 4), (float)borderscale};
         SDL_RenderFillRect(renderer, &temprect);
-        temprect = (SDL_FRect){borderscale, borderscale * 2, borderscale, windowsize.y - (borderscale * 4)};
+        temprect = (SDL_FRect){(float)borderscale, (float)borderscale * 2, (float)borderscale, windowsize.y - ((float)borderscale * 4)};
         SDL_RenderFillRect(renderer, &temprect);
-        temprect = (SDL_FRect){windowsize.x - (borderscale * 2), borderscale * 2, borderscale,  windowsize.y - (borderscale * 4)};
+        temprect = (SDL_FRect){windowsize.x - ((float)borderscale * 2), (float)borderscale * 2, (float)borderscale,  windowsize.y - ((float)borderscale * 4)};
         SDL_RenderFillRect(renderer, &temprect);
-        temprect = (SDL_FRect){borderscale * 2, windowsize.y - (borderscale * 2), windowsize.x - (borderscale * 4), borderscale};
+        temprect = (SDL_FRect){(float)borderscale * 2, windowsize.y - ((float)borderscale * 2), windowsize.x - ((float)borderscale * 4), (float)borderscale};
         SDL_RenderFillRect(renderer, &temprect);
 
 
