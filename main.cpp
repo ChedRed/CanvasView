@@ -4,8 +4,12 @@
 #endif
 #define _USE_MATH_DEFINES
 #include <cstdio>
+#include <chrono>
+#include <format>
 #include <thread>
 #include <atomic>
+#include <cstdlib>
+#include <filesystem>
 #include "TextHelp.h"
 
 
@@ -24,14 +28,17 @@ std::string cmdprefix = "";
 
 int os = 0;
 std::string rpath;
+std::string mainpath;
 iVector2 windowsize = {960, 540};
 
 
 SDL_Event e;
 std::atomic_bool loop = true;
+bool mainloop = true;
 bool focus = true;
 Vector2 mouse;
 const bool * keystates = SDL_GetKeyboardState(NULL);
+SDL_Color MainColor = {215, 55, 37, 255};
 Uint32 mousebitmask;
 bool darkmode = true;
 
@@ -43,7 +50,7 @@ std::string CourseBase = "https://creanlutheran.instructure.com/api/v1/"; // con
 
 std::atomic_int writing = -1;
 std::atomic_bool live;
-const int tcount = 3;
+const int tcount = 7;
 
 
 float deltime = 0;
@@ -59,6 +66,7 @@ struct course{
 
 struct item{
     std::string name;
+    std::string stamp;
     int id;
 };
 
@@ -136,7 +144,7 @@ item ToItem(std::string value){
             name = split(returnv[i], ":", 1)[1];
         }
     }
-    return {name, id};
+    return {name, std::format("{:%FT%TZ}", std::chrono::system_clock::now()), id};
 }
 
 
@@ -257,7 +265,7 @@ void CanvasThread(){
     std::cout << "Collected all assignments" << std::endl;
 
     while (loop.load()){
-
+        SDL_Delay(0);
     }
 }
 
@@ -271,7 +279,10 @@ int main(int argc, char* argv[]) {
     #ifdef _WIN32
     os = 1;
     cmdprefix = "cmd /C ";
+    mainpath = "C:\\Program Files\\Canvas View\\";
     #elifdef __APPLE__
+    homedir = std::getenv("HOME");
+    mainpath = homedir+"/Library/Application Support/com.chedred.canvasview/";
     os = 2;
     #elifdef __linux__
     os = 3;
@@ -285,7 +296,7 @@ int main(int argc, char* argv[]) {
     /* Initialize SDL, create window and renderer */
     std::cout << "Initializing SDL3" << std::endl;
     SDL_Init(SDL_INIT_VIDEO);
-    SDL_Window * window = SDL_CreateWindow("RePiskel", windowsize.x, windowsize.y, SDL_WINDOW_RESIZABLE | SDL_WINDOW_MOUSE_CAPTURE);
+    SDL_Window * window = SDL_CreateWindow("Canvas View", windowsize.x, windowsize.y, SDL_WINDOW_RESIZABLE | SDL_WINDOW_MOUSE_CAPTURE);
     SDL_Renderer * renderer = SDL_CreateRenderer(window, NULL);
     SDL_SetWindowMinimumSize(window, 960, 540);
     SDL_SetRenderVSync(renderer, 1);
@@ -294,8 +305,42 @@ int main(int argc, char* argv[]) {
     std::cout << "Successfully initialized SDL3" << std::endl;
 
 
+    std::cout << homedir << std::endl;
+
+
     /* Create textures */
-    SDL_Texture * Corner = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, 4, 4);
+    int borderscale = 6;
+    SDL_Texture * Corner = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, borderscale, borderscale);
+    SDL_SetRenderTarget(renderer, Corner);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    SDL_RenderClear(renderer);
+    Vector2 CenterOf = {borderscale, borderscale};
+    Vector2 Pos;
+    for (int y = 0; y < borderscale; y++){
+        for (int x = 0; x < borderscale; x++){
+            Pos = {x, y};
+            if ((CenterOf-Pos).Magnitude() <= borderscale+1){
+                SDL_SetRenderDrawColor(renderer, MainColor.r, MainColor.g, MainColor.b, (Uint8)limit((borderscale-(CenterOf-Pos).Magnitude()+1)*255, 0, 255));
+                SDL_RenderPoint(renderer, x, y);
+            }
+        }
+    }
+    SDL_Texture * InvertedCorner = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, borderscale, borderscale);
+    SDL_SetRenderTarget(renderer, InvertedCorner);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    SDL_RenderClear(renderer);
+    for (int y = 0; y < borderscale; y++){
+        for (int x = 0; x < borderscale; x++){
+            Pos = {x, y};
+            if ((CenterOf-Pos).Magnitude() > borderscale){
+                SDL_SetRenderDrawColor(renderer, MainColor.r, MainColor.g, MainColor.b, (Uint8)limit(((CenterOf-Pos).Magnitude()-borderscale)*255, 0, 255));
+                SDL_RenderPoint(renderer, x, y);
+            }
+        }
+    }
+
+
+    SDL_SetRenderTarget(renderer, NULL);
 
 
     /* Initialize SDL_ttf, create font object */
@@ -304,15 +349,17 @@ int main(int argc, char* argv[]) {
 
 
     /* Init text assistant :) */
-    TextCharacters Characters = {renderer, font, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890,.~!@#$%^&*()_+-=:;\"'? "};
-    TextObject Title = {"", Center, Center, Vector2((float)windowsize.x/2, (float)windowsize.y/2), {(Uint8)(255*darkmode), (Uint8)(255*darkmode), (Uint8)(255*darkmode), 255}, true};
+    TextCharacters CharactersB = TextCharacters(renderer, font, "");
+    TextCharacters * Characters = &CharactersB;
+    TextObject Title = TextObject("", Characters, Center, Top, Vector2((float)windowsize.x/2, (float)windowsize.y/2), {(Uint8)(255*darkmode), (Uint8)(255*darkmode), (Uint8)(255*darkmode), 255}, true);
+    TextObject Intro = TextObject("Insert your Canvas API key:", Characters, Center, Bottom, Vector2((float)windowsize.x/2, (float)windowsize.y/2), {(Uint8)(255*darkmode), (Uint8)(255*darkmode), (Uint8)(255*darkmode), 255}, false);
 
 
     std::thread canvas = std::thread(CanvasThread);
 
 
     /* Main loop */
-    while (loop.load()){
+    while (mainloop){
 
 
         /* Get mouse pos and get FPS */
@@ -329,13 +376,15 @@ int main(int argc, char* argv[]) {
         while (SDL_PollEvent(&e)){
             switch (e.type) {
                 case SDL_EVENT_QUIT:
-                    loop.store(false);
+                    mainloop = false;
                     break;
 
 
                 /* Resize window */
                 case SDL_EVENT_WINDOW_RESIZED:
                     SDL_GetWindowSize(window, &windowsize.x, &windowsize.y);
+                    Title.Position = {windowsize.x/2, windowsize.y/2};
+                    Intro.Position = {windowsize.x/2, windowsize.y/2};
 
 
                 /* Reduce FPS if unfocussed */
@@ -349,7 +398,7 @@ int main(int argc, char* argv[]) {
 
                 /* Interact with UI */
                 case SDL_EVENT_MOUSE_BUTTON_DOWN:
-                    Title.TrySelect(mouse, keystates[SDL_SCANCODE_LSHIFT], Characters);
+                    Title.TrySelect(mouse, keystates[SDL_SCANCODE_LSHIFT]);
                     break;
 
 
@@ -359,16 +408,16 @@ int main(int argc, char* argv[]) {
                     /* Undo/Redo */
                     if (keystates[SDL_MODKEY]) {
                         if (e.key.key == SDLK_A){
-                            Title.Edit("a", keystates[SDL_MODKEY], Characters);
+                            Title.Edit("a", keystates[SDL_MODKEY]);
                         }
                         elif (e.key.key == SDLK_C){
-                            Title.Edit("c", keystates[SDL_MODKEY], Characters);
+                            Title.Edit("c", keystates[SDL_MODKEY]);
                         }
                         elif (e.key.key == SDLK_X){
-                            Title.Edit("x", keystates[SDL_MODKEY], Characters);
+                            Title.Edit("x", keystates[SDL_MODKEY]);
                         }
                         elif (e.key.key == SDLK_V){
-                            Title.Edit("v", keystates[SDL_MODKEY], Characters);
+                            Title.Edit("v", keystates[SDL_MODKEY]);
                         }
                     }
 
@@ -387,23 +436,53 @@ int main(int argc, char* argv[]) {
 
 
                 case SDL_EVENT_TEXT_INPUT:
-                    Title.Edit(e.text.text, false, Characters);
+                    Title.Edit(e.text.text, false);
                     break;
             }
         }
 
         if (mousebitmask & SDL_BUTTON_LMASK){
-            Title.ConTrySelect(mouse, Characters);
+            Title.ConTrySelect(mouse);
         }
 
 
-        Title.Render(renderer, Characters);
         if (Title.Text.length()){
             SDL_SetWindowTitle(window, (Title.Text).c_str());
         }
         else{
             SDL_SetWindowTitle(window, "Canvas View - Log In");
         }
+
+
+        Title.Render(renderer, deltime);
+        Intro.Render(renderer);
+        SDL_FRect temprect = {borderscale, borderscale, borderscale, borderscale};
+        SDL_RenderTextureRotated(renderer, Corner, NULL, &temprect, 0, NULL, SDL_FLIP_NONE);
+        temprect = {borderscale * 2, borderscale * 2, borderscale, borderscale};
+        SDL_RenderTextureRotated(renderer, InvertedCorner, NULL, &temprect, 0, NULL, SDL_FLIP_NONE);
+        temprect = (SDL_FRect){windowsize.x - (borderscale * 2), borderscale, borderscale, borderscale};
+        SDL_RenderTextureRotated(renderer, Corner, NULL, &temprect, 90, NULL, SDL_FLIP_NONE);
+        temprect = (SDL_FRect){windowsize.x - (borderscale * 3), borderscale * 2, borderscale, borderscale};
+        SDL_RenderTextureRotated(renderer, InvertedCorner, NULL, &temprect, 90, NULL, SDL_FLIP_NONE);
+        temprect = (SDL_FRect){windowsize.x - (borderscale * 2), windowsize.y - (borderscale * 2), borderscale, borderscale};
+        SDL_RenderTextureRotated(renderer, Corner, NULL, &temprect, 180, NULL, SDL_FLIP_NONE);
+        temprect = (SDL_FRect){windowsize.x - (borderscale * 3), windowsize.y - (borderscale * 3), borderscale, borderscale};
+        SDL_RenderTextureRotated(renderer, InvertedCorner, NULL, &temprect, 180, NULL, SDL_FLIP_NONE);
+        temprect = (SDL_FRect){borderscale, windowsize.y - (borderscale * 2), borderscale, borderscale};
+        SDL_RenderTextureRotated(renderer, Corner, NULL, &temprect, 270, NULL, SDL_FLIP_NONE);
+        temprect = (SDL_FRect){borderscale * 2, windowsize.y - (borderscale * 3), borderscale, borderscale};
+        SDL_RenderTextureRotated(renderer, InvertedCorner, NULL, &temprect, 270, NULL, SDL_FLIP_NONE);
+
+
+        SDL_SetRenderDrawColor(renderer, MainColor.r, MainColor.g, MainColor.b, MainColor.a);
+        temprect = (SDL_FRect){borderscale * 2, borderscale, windowsize.x - (borderscale * 4), borderscale};
+        SDL_RenderFillRect(renderer, &temprect);
+        temprect = (SDL_FRect){borderscale, borderscale * 2, borderscale, windowsize.y - (borderscale * 4)};
+        SDL_RenderFillRect(renderer, &temprect);
+        temprect = (SDL_FRect){windowsize.x - (borderscale * 2), borderscale * 2, borderscale,  windowsize.y - (borderscale * 4)};
+        SDL_RenderFillRect(renderer, &temprect);
+        temprect = (SDL_FRect){borderscale * 2, windowsize.y - (borderscale * 2), windowsize.x - (borderscale * 4), borderscale};
+        SDL_RenderFillRect(renderer, &temprect);
 
 
         /* Push render content */
@@ -418,6 +497,7 @@ int main(int argc, char* argv[]) {
 
 
     /* Exit properly */
+    loop.store(false);
     SDL_DestroyRenderer(renderer);
     SDL_StopTextInput(window);
     SDL_DestroyWindow(window);

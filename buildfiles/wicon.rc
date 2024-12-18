@@ -6,7 +6,7 @@ BEGIN
     BEGIN
         BLOCK "040904E4"
         BEGIN
-            VALUE "FileDescription", "RePiskel"
+            VALUE "FileDescription", "Canvas View"
         END
     END
 END
