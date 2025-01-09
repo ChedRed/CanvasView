@@ -1,5 +1,6 @@
 CompileFlags:
   Add:
     - -I/usr/local/include
+    - -I/Users/ChedRed/Desktop/None/Coding/Projects/Libraries/vcpkg/installed/x64-windows/include
     - -std=c++2b
     - -ferror-limit=100

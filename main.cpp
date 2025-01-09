@@ -3,12 +3,13 @@
 #include <Windows.h>
 #endif
 #define _USE_MATH_DEFINES
+#include <curl/curl.h>
 #include <cstdio>
-#include <chrono>
 #include <format>
 #include <thread>
 #include <atomic>
 #include <cstdlib>
+#include <chrono>
 #include <filesystem>
 #include "TextHelp.h"
 
@@ -77,11 +78,12 @@ std::vector<std::vector<item> > items;
 
 
 std::string command(const char * cmd){
+    std::string returnv = "";
+
     FILE * pipe = popen(cmd, "r");
     if (!pipe) return "";
 
-    char buffer[128];
-    std::string returnv = "";
+    char buffer[4096];
     while (fgets(buffer, sizeof(buffer), pipe) != nullptr){
         returnv += std::string() + buffer;
     }
@@ -167,7 +169,8 @@ course ToCourse(std::string value){
 
 
 void FirStage(){
-    std::string value = splice(command((cmdprefix + "curl --no-progress-meter -H 'Authorization: Bearer " + key + "' " + CourseBase + "courses").c_str()), 1, 1);
+    std::string value = splice(command((cmdprefix + "curl --no-progress-meter -H \"Authorization: Bearer " + key + "\" " + CourseBase + "courses").c_str()), 1, 1);
+    std::cout << "First command executed" << std::endl;
     std::vector<std::string> RawCourses;
     std::string add;
     int depth = 0;
@@ -183,15 +186,16 @@ void FirStage(){
 
     for (int i = 0; i < RawCourses.size(); i++){
         courses.push_back(ToCourse(RawCourses[i]));
+        std::cout << courses[i].name << std::endl;
     }
 }
 
 
-void SecondStage(int course, int thread){
+void SecondStage(course course, int thread){
     int page = 1;
     std::string value = "";
     while (true){
-        std::string next = splice(command((cmdprefix + "curl --no-progress-meter -H 'Authorization: Bearer " + key + "' " + CourseBase + "courses/" + std::to_string(course) + "/assignments?page=" + std::to_string(page) + "").c_str()), 1, 1);
+        std::string next = splice(command((cmdprefix + "curl --no-progress-meter -H \"Authorization: Bearer " + key + "\" " + CourseBase + "courses/" + std::to_string(course.id) + "/assignments?page=" + std::to_string(page) + "").c_str()), 1, 1);
 
         if (next == ""){
             break;
@@ -229,31 +233,32 @@ void SecondStage(int course, int thread){
         }
     }
     items.push_back(courseitems);
-    std::cout << courseitems.size() << " items in course " << course << std::endl;
+    std::cout << courseitems.size() << " items in " << course.name << " (" << course.id << ")" << std::endl;
     writing.store(-1);
 }
 
 
 void CanvasThread(){
+
     FirStage();
     std::cout << "Collected all courses" << std::endl;
     std::thread threads[tcount];
     std::atomic_bool tactive[tcount] = {false};
-    std::vector<int> ids;
+    std::vector<course> courseclone;
     for (int i = 0; i < courses.size(); i++){
-        ids.push_back(courses[i].id);
+        courseclone.push_back(courses[i]);
     }
-    std::cout << "Number of IDs: " + std::to_string(ids.size()) << std::endl;
-    while (ids.size() > 0){
+    std::cout << "Number of IDs: " + std::to_string(courseclone.size()) << std::endl;
+    while (courseclone.size() > 0){
         for (int i = 0; i < tcount; i++){
             if (threads[i].joinable()){
                 threads[i].join();
                 std::cout << "Joined thread " + std::to_string(i) << std::endl;
             }
-            if (ids.size() > 0){
-                threads[i] = std::thread(SecondStage, ids[0], i);
-                std::cout << "Started thread " + std::to_string(i) + " on assignments for " + std::to_string(ids[0]) << std::endl;
-                ids.erase(ids.begin());
+            if (courseclone.size() > 0){
+                threads[i] = std::thread(SecondStage, courseclone[0], i);
+                std::cout << "Started thread " << std::to_string(i) << " on assignments for " << courseclone[0].name << " (" << courseclone[0].id << ")" << std::endl;
+                courseclone.erase(courseclone.begin());
             }
         }
     }

@@ -59,9 +59,12 @@ else(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 
 
     # Link libraries and include directories
+    find_package(CURL REQUIRED)
+    target_link_libraries(CanvasView PRIVATE CURL::libcurl)
     target_link_libraries(CanvasView PRIVATE C:/usr/local/lib/SDL3.lib)
     target_link_libraries(CanvasView PRIVATE C:/usr/local/lib/SDL3_ttf.lib)
     target_include_directories(CanvasView PRIVATE C:/usr/local/include)
+    target_include_directories(CanvasView PRIVATE C:/Users/ChedRed/Desktop/None/Coding/Projects/Libraries/vcpkg/installed/x64-windows/include)
 
 
     # Add basic files to windows app
