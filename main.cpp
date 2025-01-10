@@ -1,3 +1,4 @@
+#include <fstream>
 #include <iostream>
 #ifdef _WIN32
 #include <Windows.h>
@@ -12,6 +13,7 @@
 #include <chrono>
 #include <filesystem>
 #include "TextHelp.h"
+#include "ui.h"
 
 
 std::string cmdprefix = "";
@@ -60,16 +62,24 @@ float then = 0;
 float now = 0;
 
 
-struct course{
+struct item{
     std::string name;
     int id;
+    std::string stamp;
 };
 
 
-struct item{
+struct course{
     std::string name;
-    std::string stamp;
     int id;
+    std::vector<item> assignments;
+};
+
+
+struct user{
+    std::string name;
+    int id;
+    std::vector<course> courses;
 };
 
 
@@ -147,7 +157,7 @@ item ToItem(std::string value){
             name = split(returnv[i], ":", 1)[1];
         }
     }
-    return {name, std::format("{:%FT%TZ}", std::chrono::system_clock::now()), id};
+    return {name, id, std::format("{:%FT%TZ}", std::chrono::system_clock::now())};
 }
 
 
@@ -279,7 +289,7 @@ void CanvasThread(){
 
 /* Main! */
 int main(int argc, char* argv[]) {
-
+    ui UI = ui(3,2, 8, 8, 16);
 
     /* Set os variable */
     #ifdef _WIN32
@@ -295,8 +305,25 @@ int main(int argc, char* argv[]) {
     #endif
 
 
-    if (os == 1) rpath = "./";
-    elif (os == 2) rpath = "../Resources/";
+    if (os == 1){
+        rpath = "./";
+        SDL_SetHint(SDL_HINT_RENDER_DRIVER, "metal");
+    }
+    elif (os == 2){
+        rpath = "../Resources/";
+    }
+
+
+    std::filesystem::path stored = mainpath+".stored";
+
+    if (std::filesystem::exists(stored)){
+        std::ifstream file(stored);
+        file.close();
+    }
+    elif(!std::filesystem::exists(mainpath)){
+        std::filesystem::create_directory(mainpath);
+    }
+    std::fstream file(stored, std::ios::out);
 
 
     /* Initialize SDL, create window and renderer */
@@ -311,7 +338,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Successfully initialized SDL3" << std::endl;
 
 
-    std::cout << homedir << std::endl;
+
 
 
     /* Create textures */
@@ -462,38 +489,11 @@ int main(int argc, char* argv[]) {
 
         Title.Render(renderer, deltime);
         Intro.Render(renderer);
-        SDL_FRect temprect = {(float)borderscale, (float)borderscale, (float)borderscale, (float)borderscale};
-        SDL_RenderTextureRotated(renderer, Corner, NULL, &temprect, 0, NULL, SDL_FLIP_NONE);
-        temprect = {(float)borderscale * 2, (float)borderscale * 2, (float)borderscale, (float)borderscale};
-        SDL_RenderTextureRotated(renderer, InvertedCorner, NULL, &temprect, 0, NULL, SDL_FLIP_NONE);
-        temprect = (SDL_FRect){windowsize.x - ((float)borderscale * 2), (float)borderscale, (float)borderscale, (float)borderscale};
-        SDL_RenderTextureRotated(renderer, Corner, NULL, &temprect, 90, NULL, SDL_FLIP_NONE);
-        temprect = (SDL_FRect){windowsize.x - ((float)borderscale * 3), (float)borderscale * 2, (float)borderscale, (float)borderscale};
-        SDL_RenderTextureRotated(renderer, InvertedCorner, NULL, &temprect, 90, NULL, SDL_FLIP_NONE);
-        temprect = (SDL_FRect){windowsize.x - ((float)borderscale * 2), windowsize.y - ((float)borderscale * 2), (float)borderscale, (float)borderscale};
-        SDL_RenderTextureRotated(renderer, Corner, NULL, &temprect, 180, NULL, SDL_FLIP_NONE);
-        temprect = (SDL_FRect){windowsize.x - ((float)borderscale * 3), windowsize.y - ((float)borderscale * 3), (float)borderscale, (float)borderscale};
-        SDL_RenderTextureRotated(renderer, InvertedCorner, NULL, &temprect, 180, NULL, SDL_FLIP_NONE);
-        temprect = (SDL_FRect){(float)borderscale, windowsize.y - ((float)borderscale * 2), (float)borderscale, (float)borderscale};
-        SDL_RenderTextureRotated(renderer, Corner, NULL, &temprect, 270, NULL, SDL_FLIP_NONE);
-        temprect = (SDL_FRect){(float)borderscale * 2, windowsize.y - ((float)borderscale * 3), (float)borderscale, (float)borderscale};
-        SDL_RenderTextureRotated(renderer, InvertedCorner, NULL, &temprect, 270, NULL, SDL_FLIP_NONE);
-
-
-        SDL_SetRenderDrawColor(renderer, MainColor.r, MainColor.g, MainColor.b, MainColor.a);
-        temprect = (SDL_FRect){(float)borderscale * 2, (float)borderscale, windowsize.x - ((float)borderscale * 4), (float)borderscale};
-        SDL_RenderFillRect(renderer, &temprect);
-        temprect = (SDL_FRect){(float)borderscale, (float)borderscale * 2, (float)borderscale, windowsize.y - ((float)borderscale * 4)};
-        SDL_RenderFillRect(renderer, &temprect);
-        temprect = (SDL_FRect){windowsize.x - ((float)borderscale * 2), (float)borderscale * 2, (float)borderscale,  windowsize.y - ((float)borderscale * 4)};
-        SDL_RenderFillRect(renderer, &temprect);
-        temprect = (SDL_FRect){(float)borderscale * 2, windowsize.y - ((float)borderscale * 2), windowsize.x - ((float)borderscale * 4), (float)borderscale};
-        SDL_RenderFillRect(renderer, &temprect);
 
 
         /* Push render content */
         SDL_RenderPresent(renderer);
-        SDL_SetRenderDrawColor(renderer, 255-(Uint8)(255*darkmode), 255-(Uint8)(255*darkmode), 255-(Uint8)(255*darkmode), 255);
+        SDL_SetRenderDrawColor(renderer, (Uint8)255*(1-darkmode), (Uint8)255*(1-darkmode), (Uint8)255*(1-darkmode), 255);
         SDL_RenderClear(renderer);
 
 
