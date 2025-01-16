@@ -1,3 +1,5 @@
+#include "SDL3/SDL_video.h"
+#include "Vector2.h"
 #include <fstream>
 #include <iostream>
 #ifdef _WIN32
@@ -34,6 +36,11 @@ std::string rpath;
 std::string homedir;
 std::string mainpath;
 iVector2 windowsize = {960, 540};
+Vector2 WindowSize = {960, 540};
+
+
+CURL * handle;
+static char errorBuffer[CURL_ERROR_SIZE];
 
 
 SDL_Event e;
@@ -52,8 +59,6 @@ std::string key = "4613~JW2h7AZXUK6LBkEnKxtPtmrJ22cUeUVGyfYCUhnuNNKat46nVAVN9ufU
 std::string CourseBase = "https://creanlutheran.instructure.com/api/v1/"; // conversations, courses
 
 
-std::atomic_int writing = -1;
-std::atomic_bool live;
 const int tcount = 7;
 
 
@@ -83,21 +88,20 @@ struct user{
 };
 
 
-std::vector<course> courses;
-std::vector<std::vector<item> > items;
+user muser;
+
+
+size_t write(char * ptr, size_t size, size_t nmemb, std::string * data) {
+    data->append(ptr, size * nmemb);
+    return size * nmemb;
+}
 
 
 std::string command(const char * cmd){
-    std::string returnv = "";
-
-    FILE * pipe = popen(cmd, "r");
-    if (!pipe) return "";
-
-    char buffer[4096];
-    while (fgets(buffer, sizeof(buffer), pipe) != nullptr){
-        returnv += std::string() + buffer;
-    }
-    pclose(pipe);
+    std::string returnv;
+    curl_easy_setopt(handle, CURLOPT_WRITEDATA, &returnv);
+    curl_easy_setopt(handle, CURLOPT_URL, cmd);
+    curl_easy_perform(handle);
     return returnv;
 }
 
@@ -174,13 +178,20 @@ course ToCourse(std::string value){
         }
         else add += value[i];
     }
-    return {split(returnv[1], ":", 1)[1], std::stoi(split(returnv[0], ":", 1)[1])};
+    return {splice(split(returnv[1], ":", 1)[1], 1, 1), std::stoi(split(returnv[0], ":", 1)[1])};
+}
+
+
+size_t userwrite(char * ptr, size_t size, size_t nmemb, user * tuser, int coursenum){
+    std::string returnv;
+    returnv.append(ptr, size * nmemb);
+    tuser->courses[coursenum].assignments.push_back(ToItem(returnv));
+    return size * nmemb;
 }
 
 
 void FirStage(){
-    std::string value = splice(command((cmdprefix + "curl --no-progress-meter -H \"Authorization: Bearer " + key + "\" " + CourseBase + "courses").c_str()), 1, 1);
-    std::cout << "First command executed" << std::endl;
+    std::string value = splice(command((CourseBase + "courses").c_str()), 1, 1);
     std::vector<std::string> RawCourses;
     std::string add;
     int depth = 0;
@@ -195,17 +206,16 @@ void FirStage(){
     }
 
     for (int i = 0; i < RawCourses.size(); i++){
-        courses.push_back(ToCourse(RawCourses[i]));
-        std::cout << courses[i].name << std::endl;
+        muser.courses.push_back(ToCourse(RawCourses[i]));
     }
 }
 
 
-void SecondStage(course course, int thread){
+void SecondStage(int coursenum){
     int page = 1;
     std::string value = "";
     while (true){
-        std::string next = splice(command((cmdprefix + "curl --no-progress-meter -H \"Authorization: Bearer " + key + "\" " + CourseBase + "courses/" + std::to_string(course.id) + "/assignments?page=" + std::to_string(page) + "").c_str()), 1, 1);
+        std::string next = splice(command((CourseBase + "courses/" + std::to_string(muser.courses[coursenum].id) + "/assignments?per-page=100&page=" + std::to_string(page)).c_str()), 1, 1);
 
         if (next == ""){
             break;
@@ -236,15 +246,8 @@ void SecondStage(course course, int thread){
     for (int i = 0; i < RawAssignments.size(); i++){
         courseitems.push_back(ToItem(RawAssignments[i]));
     }
-    while (true){
-        if (writing.load() == -1){
-            writing.store(thread);
-            break;
-        }
-    }
-    items.push_back(courseitems);
-    std::cout << courseitems.size() << " items in " << course.name << " (" << course.id << ")" << std::endl;
-    writing.store(-1);
+    muser.courses[coursenum].assignments = courseitems;
+    std::cout << muser.courses[coursenum].assignments.size() << " assignments in " << muser.courses[coursenum].name << std::endl;
 }
 
 
@@ -252,31 +255,9 @@ void CanvasThread(){
 
     FirStage();
     std::cout << "Collected all courses" << std::endl;
-    std::thread threads[tcount];
-    std::atomic_bool tactive[tcount] = {false};
-    std::vector<course> courseclone;
-    for (int i = 0; i < courses.size(); i++){
-        courseclone.push_back(courses[i]);
-    }
-    std::cout << "Number of IDs: " + std::to_string(courseclone.size()) << std::endl;
-    while (courseclone.size() > 0){
-        for (int i = 0; i < tcount; i++){
-            if (threads[i].joinable()){
-                threads[i].join();
-                std::cout << "Joined thread " + std::to_string(i) << std::endl;
-            }
-            if (courseclone.size() > 0){
-                threads[i] = std::thread(SecondStage, courseclone[0], i);
-                std::cout << "Started thread " << std::to_string(i) << " on assignments for " << courseclone[0].name << " (" << courseclone[0].id << ")" << std::endl;
-                courseclone.erase(courseclone.begin());
-            }
-        }
-    }
-    for (int i = 0; i < tcount; i++){
-        if (threads[i].joinable()){
-            threads[i].join();
-            std::cout << "Joined thread " + std::to_string(i) << std::endl;
-        }
+    // std::vector<
+    for (int i = 0; i < muser.courses.size(); i++){
+        SecondStage(i);
     }
     std::cout << "Collected all assignments" << std::endl;
 
@@ -289,7 +270,6 @@ void CanvasThread(){
 
 /* Main! */
 int main(int argc, char* argv[]) {
-    ui UI = ui(3,2, 8, 8, 16);
 
     /* Set os variable */
     #ifdef _WIN32
@@ -326,10 +306,19 @@ int main(int argc, char* argv[]) {
     std::fstream file(stored, std::ios::out);
 
 
+    struct curl_slist *headers = NULL;
+    headers = curl_slist_append(headers, ("Authorization: Bearer "+key).c_str());
+    curl_global_init(CURL_GLOBAL_ALL);
+    handle = curl_easy_init();
+    curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, write);
+
+
+
     /* Initialize SDL, create window and renderer */
     std::cout << "Initializing SDL3" << std::endl;
     SDL_Init(SDL_INIT_VIDEO);
-    SDL_Window * window = SDL_CreateWindow("Canvas View", windowsize.x, windowsize.y, SDL_WINDOW_RESIZABLE | SDL_WINDOW_MOUSE_CAPTURE);
+    SDL_Window * window = SDL_CreateWindow("Canvas View", windowsize.x, windowsize.y, SDL_WINDOW_RESIZABLE | SDL_WINDOW_UTILITY);
     SDL_Renderer * renderer = SDL_CreateRenderer(window, NULL);
     SDL_SetWindowMinimumSize(window, 960, 540);
     SDL_SetRenderVSync(renderer, 1);
@@ -338,42 +327,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Successfully initialized SDL3" << std::endl;
 
 
-
-
-
-    /* Create textures */
-    int borderscale = 6;
-    SDL_Texture * Corner = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, borderscale, borderscale);
-    SDL_SetRenderTarget(renderer, Corner);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-    SDL_RenderClear(renderer);
-    Vector2 CenterOf = {(float)borderscale, (float)borderscale};
-    Vector2 Pos;
-    for (int y = 0; y < borderscale; y++){
-        for (int x = 0; x < borderscale; x++){
-            Pos = {(float)x, (float)y};
-            if ((CenterOf-Pos).Magnitude() <= borderscale+1){
-                SDL_SetRenderDrawColor(renderer, MainColor.r, MainColor.g, MainColor.b, (Uint8)limit((borderscale-(CenterOf-Pos).Magnitude()+1)*255, 0, 255));
-                SDL_RenderPoint(renderer, x, y);
-            }
-        }
-    }
-    SDL_Texture * InvertedCorner = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, borderscale, borderscale);
-    SDL_SetRenderTarget(renderer, InvertedCorner);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-    SDL_RenderClear(renderer);
-    for (int y = 0; y < borderscale; y++){
-        for (int x = 0; x < borderscale; x++){
-            Pos = {(float)x, (float)y};
-            if ((CenterOf-Pos).Magnitude() > borderscale){
-                SDL_SetRenderDrawColor(renderer, MainColor.r, MainColor.g, MainColor.b, (Uint8)limit(((CenterOf-Pos).Magnitude()-borderscale)*255, 0, 255));
-                SDL_RenderPoint(renderer, x, y);
-            }
-        }
-    }
-
-
-    SDL_SetRenderTarget(renderer, NULL);
+    ui UI = ui(renderer, 2, 3, 8, 8, 16);
 
 
     /* Initialize SDL_ttf, create font object */
@@ -416,6 +370,8 @@ int main(int argc, char* argv[]) {
                 /* Resize window */
                 case SDL_EVENT_WINDOW_RESIZED:
                     SDL_GetWindowSize(window, &windowsize.x, &windowsize.y);
+                    WindowSize.x = windowsize.x;
+                    WindowSize.y = windowsize.y;
                     Title.Position = {(float)windowsize.x/2, (float)windowsize.y/2};
                     Intro.Position = {(float)windowsize.x/2, (float)windowsize.y/2};
 
@@ -487,6 +443,7 @@ int main(int argc, char* argv[]) {
         }
 
 
+        UI.Render(renderer, WindowSize);
         Title.Render(renderer, deltime);
         Intro.Render(renderer);
 
@@ -509,6 +466,7 @@ int main(int argc, char* argv[]) {
     SDL_DestroyWindow(window);
     SDL_Quit();
     canvas.join();
+    curl_easy_cleanup(handle);
     return 0;
 }
 

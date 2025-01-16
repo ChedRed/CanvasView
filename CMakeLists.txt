@@ -28,13 +28,16 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     # Set macos executable rpath and result path
     set_target_properties(CanvasView PROPERTIES INSTALL_RPATH "@executable_path/../Resources" BUILD_WITH_INSTALL_RPATH TRUE)
     set_target_properties(CanvasView PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/build)
+    set_target_properties(CanvasView PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/CanvasView.app/Contents/Resources)
 
 
     # Link libraries and include directories
-    target_link_libraries(CanvasView PRIVATE ${CMAKE_SOURCE_DIR}/../Cached/libSDL3.0.dylib)
-    target_link_libraries(CanvasView PRIVATE ${CMAKE_SOURCE_DIR}/../Cached/libSDL3_ttf.0.0.0.dylib)
-    # target_link_libraries(CanvasView PRIVATE ${CMAKE_SOURCE_DIR}/../Cached/libgtk-4.1.dylib)
-    target_include_directories(CanvasView PRIVATE /usr/local/include)
+    find_package(CURL REQUIRED)
+    find_package(SDL3 REQUIRED CONFIG COMPONENTS SDL3-shared)
+    find_package(SDL3_TTF REQUIRED CONFIG COMPONENTS SDL3_ttf-shared)
+    target_link_libraries(CanvasView PRIVATE CURL::libcurl)
+    target_link_libraries(CanvasView PRIVATE SDL3::SDL3)
+    target_link_libraries(CanvasView PRIVATE SDL3_ttf::SDL3_ttf)
 
 
     # Make directories for macos app
@@ -49,8 +52,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 
 
     # Add resources to macos app
-    file(COPY ${CMAKE_SOURCE_DIR}/../Cached/libSDL3.0.dylib DESTINATION ${CMAKE_SOURCE_DIR}/build/CanvasView.app/contents/Resources)
-    configure_file(${CMAKE_SOURCE_DIR}/../Cached/libSDL3_ttf.0.0.0.dylib ${CMAKE_SOURCE_DIR}/build/CanvasView.app/contents/Resources/libSDL3_ttf.0.dylib COPYONLY)
+    add_custom_command(TARGET CanvasView POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3-shared> $<TARGET_FILE_DIR:CanvasView>/../Resources)
+    add_custom_command(TARGET CanvasView POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3_ttf::SDL3_ttf-shared> $<TARGET_FILE_DIR:CanvasView>/../Resources)
+    add_custom_command(TARGET CanvasView POST_BUILD COMMAND ${CMAKE_COMMAND} -E rename $<TARGET_FILE_DIR:CanvasView>/../Resources/libSDL3_ttf.0.0.0.dylib $<TARGET_FILE_DIR:CanvasView>/../Resources/libSDL3_ttf.0.dylib)
+
 
 
 else(CMAKE_SYSTEM_NAME STREQUAL "Windows")
