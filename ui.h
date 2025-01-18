@@ -1,5 +1,6 @@
 #pragma once
 #include "TextHelp.h"
+#include <iostream>
 
 class ui{
 public:
@@ -25,8 +26,12 @@ inline ui::ui(SDL_Renderer * Renderer, int rows, int collumns, int width, int ma
     Width = width;
     Margin = margin;
     Radius = radius;
+
     Corner = SDL_CreateTexture(Renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, radius, radius);
+    std::cout << Corner << std::endl;
     SDL_SetRenderTarget(Renderer, Corner);
+    std::cout << "thisthat" << std::endl;
+
     SDL_SetRenderDrawColor(Renderer, 0, 0, 0, 0);
     SDL_RenderClear(Renderer);
     Vector2 Pos;

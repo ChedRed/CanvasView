@@ -255,9 +255,20 @@ void CanvasThread(){
 
     FirStage();
     std::cout << "Collected all courses" << std::endl;
-    // std::vector<
+    std::vector<std::thread> threads(tcount);
+    int courses = 0;
+    while (courses < muser.courses.size()){
+        for (int i = 0; i < tcount; i++){
+            if (threads[i].joinable()){
+                threads[i].join();
+                if (courses < muser.courses.size()){
+                    threads[i] = std::thread(SecondStage, courses);
+                    courses++;
+                }
+            }
+        }
+    }
     for (int i = 0; i < muser.courses.size(); i++){
-        SecondStage(i);
     }
     std::cout << "Collected all assignments" << std::endl;
 
@@ -294,16 +305,16 @@ int main(int argc, char* argv[]) {
     }
 
 
-    std::filesystem::path stored = mainpath+".stored";
+    // std::filesystem::path stored = mainpath+".stored";
 
-    if (std::filesystem::exists(stored)){
-        std::ifstream file(stored);
-        file.close();
-    }
-    elif(!std::filesystem::exists(mainpath)){
-        std::filesystem::create_directory(mainpath);
-    }
-    std::fstream file(stored, std::ios::out);
+    // if (std::filesystem::exists(stored)){
+    //     std::ifstream file(stored);
+    //     file.close();
+    // }
+    // elif(!std::filesystem::exists(mainpath)){
+    //     std::filesystem::create_directory(mainpath);
+    // }
+    // std::fstream file(stored, std::ios::out);
 
 
     struct curl_slist *headers = NULL;
@@ -327,7 +338,9 @@ int main(int argc, char* argv[]) {
     std::cout << "Successfully initialized SDL3" << std::endl;
 
 
+
     ui UI = ui(renderer, 2, 3, 8, 8, 16);
+
 
 
     /* Initialize SDL_ttf, create font object */

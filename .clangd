@@ -1,6 +1,6 @@
 CompileFlags:
   Add:
     - -I/usr/local/include
-    - -I/Users/ChedRed/Desktop/None/Coding/Projects/Libraries/vcpkg/installed/x64-windows/include
+    - -I/Users/ChedRed/Desktop/None/Coding/Projects/Libraries/vcpkg/installed/x64-mingw-static/include
     - -std=c++2b
     - -ferror-limit=100

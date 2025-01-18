@@ -2,6 +2,9 @@
 cmake_minimum_required(VERSION 3.30)
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     set(CMAKE_OSX_SYSROOT macosx)
+else(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    set(CMAKE_TOOLCHAIN_FILE $ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake)
+    set(VCPKG_TARGET_TRIPLET "x64-mingw-static")
 endif()
 project(CanvasView)
 
@@ -61,15 +64,21 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 else(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     # Set windows result path
     set_target_properties(CanvasView PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/CanvasView")
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/build/CanvasView")
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/build/CanvasView")
+    set(CMAKE_PREFIX_PATH "C:/lib")
 
 
     # Link libraries and include directories
+    set(CURL_DIR "$ENV{VCPKG_ROOT}/installed/x64-mingw-static/share/curl")
     find_package(CURL REQUIRED)
+    find_package(SDL3 REQUIRED CONFIG COMPONENTS SDL3-shared)
+    find_package(SDL3_TTF REQUIRED CONFIG COMPONENTS SDL3_ttf-shared)
     target_link_libraries(CanvasView PRIVATE CURL::libcurl)
-    target_link_libraries(CanvasView PRIVATE C:/usr/local/lib/SDL3.lib)
-    target_link_libraries(CanvasView PRIVATE C:/usr/local/lib/SDL3_ttf.lib)
-    target_include_directories(CanvasView PRIVATE C:/usr/local/include)
-    target_include_directories(CanvasView PRIVATE C:/Users/ChedRed/Desktop/None/Coding/Projects/Libraries/vcpkg/installed/x64-windows/include)
+    target_link_libraries(CanvasView PRIVATE SDL3::SDL3)
+    target_link_libraries(CanvasView PRIVATE SDL3_ttf::SDL3_ttf)
+    #target_include_directories(CanvasView PRIVATE C:/usr/local/include)
+    #target_include_directories(CanvasView PRIVATE C:/Users/ChedRed/Desktop/None/Coding/Projects/Libraries/vcpkg/installed/x64-windows/include)
 
 
     # Add basic files to windows app
@@ -79,4 +88,6 @@ else(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     # Add resources to windows app
     file(COPY C:/usr/local/lib/SDL3.dll DESTINATION "${CMAKE_SOURCE_DIR}/build/CanvasView")
     file(COPY C:/usr/local/lib/SDL3_ttf.dll DESTINATION "${CMAKE_SOURCE_DIR}/build/CanvasView")
+    add_custom_command(TARGET CanvasView POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3-shared> $<TARGET_FILE_DIR:CanvasView>/../Resources)
+    add_custom_command(TARGET CanvasView POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3_ttf::SDL3_ttf-shared> $<TARGET_FILE_DIR:CanvasView>/../Resources)
 endif()
