@@ -1,6 +1,8 @@
+#include "SDL3/SDL_render.h"
 #include "SDL3/SDL_video.h"
 #include "Vector2.h"
 #include <fstream>
+#include <functional>
 #include <iostream>
 #ifdef _WIN32
 #include <Windows.h>
@@ -37,14 +39,17 @@ std::string homedir;
 std::string mainpath;
 iVector2 windowsize = {960, 540};
 Vector2 WindowSize = {960, 540};
+SDL_Window * Window;
+SDL_Renderer * Render;
 
 
 CURL * handle;
 static char errorBuffer[CURL_ERROR_SIZE];
+std::atomic_bool loop = true;
+std::atomic_int busy = -1;
 
 
 SDL_Event e;
-std::atomic_bool loop = true;
 bool mainloop = true;
 bool focus = true;
 Vector2 mouse;
@@ -211,7 +216,7 @@ void FirStage(){
 }
 
 
-void SecondStage(int coursenum){
+void SecondStage(int coursenum, int thread){
     int page = 1;
     std::string value = "";
     while (true){
@@ -246,8 +251,15 @@ void SecondStage(int coursenum){
     for (int i = 0; i < RawAssignments.size(); i++){
         courseitems.push_back(ToItem(RawAssignments[i]));
     }
-    muser.courses[coursenum].assignments = courseitems;
-    std::cout << muser.courses[coursenum].assignments.size() << " assignments in " << muser.courses[coursenum].name << std::endl;
+    while (true){
+        if (busy.load() != -1){
+            busy.store(thread);
+            muser.courses[coursenum].assignments = courseitems;
+            std::cout << muser.courses[coursenum].assignments.size() << " assignments in " << muser.courses[coursenum].name << std::endl;
+            busy.store(-1);
+            break;
+        }
+    }
 }
 
 
@@ -255,14 +267,20 @@ void CanvasThread(){
 
     FirStage();
     std::cout << "Collected all courses" << std::endl;
-    std::vector<std::thread> threads(tcount);
+    std::vector<std::thread> threads;
     int courses = 0;
+    for (int i = 0; i < tcount; i++){
+        if (courses < muser.courses.size()){
+            threads.emplace_back(SecondStage, courses);
+        }
+    }
     while (courses < muser.courses.size()){
         for (int i = 0; i < tcount; i++){
             if (threads[i].joinable()){
                 threads[i].join();
                 if (courses < muser.courses.size()){
-                    threads[i] = std::thread(SecondStage, courses);
+                    std::thread t(SecondStage, courses, i);
+                    // threads[i] = t;
                     courses++;
                 }
             }
@@ -329,17 +347,16 @@ int main(int argc, char* argv[]) {
     /* Initialize SDL, create window and renderer */
     std::cout << "Initializing SDL3" << std::endl;
     SDL_Init(SDL_INIT_VIDEO);
-    SDL_Window * window = SDL_CreateWindow("Canvas View", windowsize.x, windowsize.y, SDL_WINDOW_RESIZABLE | SDL_WINDOW_UTILITY);
-    SDL_Renderer * renderer = SDL_CreateRenderer(window, NULL);
-    SDL_SetWindowMinimumSize(window, 960, 540);
-    SDL_SetRenderVSync(renderer, 1);
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_StartTextInput(window);
+    SDL_CreateWindowAndRenderer("Canvas View", windowsize.x, windowsize.y, SDL_WINDOW_RESIZABLE, &Window, &Render);
+    SDL_SetWindowMinimumSize(Window, 960, 540);
+    SDL_SetRenderVSync(Render, 1);
+    SDL_SetRenderDrawBlendMode(Render, SDL_BLENDMODE_BLEND);
+    SDL_StartTextInput(Window);
     std::cout << "Successfully initialized SDL3" << std::endl;
 
 
 
-    ui UI = ui(renderer, 2, 3, 8, 8, 16);
+    ui UI = ui(Render, 2, 3, 8, 8, 16);
 
 
 
@@ -349,7 +366,7 @@ int main(int argc, char* argv[]) {
 
 
     /* Init text assistant :) */
-    TextCharacters CharactersB = TextCharacters(renderer, font, "");
+    TextCharacters CharactersB = TextCharacters(Render, font, "");
     TextCharacters * Characters = &CharactersB;
     TextObject Title = TextObject("", Characters, Center, Top, Vector2((float)windowsize.x/2, (float)windowsize.y/2), {(Uint8)(255*darkmode), (Uint8)(255*darkmode), (Uint8)(255*darkmode), 255}, true);
     TextObject Intro = TextObject("Insert your Canvas API key:", Characters, Center, Bottom, Vector2((float)windowsize.x/2, (float)windowsize.y/2), {(Uint8)(255*darkmode), (Uint8)(255*darkmode), (Uint8)(255*darkmode), 255}, false);
@@ -382,7 +399,7 @@ int main(int argc, char* argv[]) {
 
                 /* Resize window */
                 case SDL_EVENT_WINDOW_RESIZED:
-                    SDL_GetWindowSize(window, &windowsize.x, &windowsize.y);
+                    SDL_GetWindowSize(Window, &windowsize.x, &windowsize.y);
                     WindowSize.x = windowsize.x;
                     WindowSize.y = windowsize.y;
                     Title.Position = {(float)windowsize.x/2, (float)windowsize.y/2};
@@ -449,22 +466,22 @@ int main(int argc, char* argv[]) {
 
 
         if (Title.Text.length()){
-            SDL_SetWindowTitle(window, (Title.Text).c_str());
+            SDL_SetWindowTitle(Window, (Title.Text).c_str());
         }
         else{
-            SDL_SetWindowTitle(window, "Canvas View - Log In");
+            SDL_SetWindowTitle(Window, "Canvas View - Log In");
         }
 
 
-        UI.Render(renderer, WindowSize);
-        Title.Render(renderer, deltime);
-        Intro.Render(renderer);
+        UI.Render(Render, WindowSize);
+        Title.Render(Render, deltime);
+        Intro.Render(Render);
 
 
         /* Push render content */
-        SDL_RenderPresent(renderer);
-        SDL_SetRenderDrawColor(renderer, (Uint8)255*(1-darkmode), (Uint8)255*(1-darkmode), (Uint8)255*(1-darkmode), 255);
-        SDL_RenderClear(renderer);
+        SDL_RenderPresent(Render);
+        SDL_SetRenderDrawColor(Render, (Uint8)255*(1-darkmode), (Uint8)255*(1-darkmode), (Uint8)255*(1-darkmode), 255);
+        SDL_RenderClear(Render);
 
 
         /* Wait if unfocussed */
@@ -474,9 +491,9 @@ int main(int argc, char* argv[]) {
 
     /* Exit properly */
     loop.store(false);
-    SDL_DestroyRenderer(renderer);
-    SDL_StopTextInput(window);
-    SDL_DestroyWindow(window);
+    SDL_DestroyRenderer(Render);
+    SDL_StopTextInput(Window);
+    SDL_DestroyWindow(Window);
     SDL_Quit();
     canvas.join();
     curl_easy_cleanup(handle);
