@@ -88,6 +88,6 @@ else(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     # Add resources to windows app
     file(COPY C:/usr/local/lib/SDL3.dll DESTINATION "${CMAKE_SOURCE_DIR}/build/CanvasView")
     file(COPY C:/usr/local/lib/SDL3_ttf.dll DESTINATION "${CMAKE_SOURCE_DIR}/build/CanvasView")
-    add_custom_command(TARGET CanvasView POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3-shared> $<TARGET_FILE_DIR:CanvasView>/../Resources)
-    add_custom_command(TARGET CanvasView POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3_ttf::SDL3_ttf-shared> $<TARGET_FILE_DIR:CanvasView>/../Resources)
+    add_custom_command(TARGET CanvasView POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3-shared> $<TARGET_FILE_DIR:CanvasView>)
+    add_custom_command(TARGET CanvasView POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3_ttf::SDL3_ttf-shared> $<TARGET_FILE_DIR:CanvasView>)
 endif()

@@ -1,3 +1,4 @@
+#include "SDL3/SDL_error.h"
 #include "SDL3/SDL_render.h"
 #include "SDL3/SDL_video.h"
 #include "Vector2.h"
@@ -39,11 +40,8 @@ std::string homedir;
 std::string mainpath;
 iVector2 windowsize = {960, 540};
 Vector2 WindowSize = {960, 540};
-SDL_Window * Window;
-SDL_Renderer * Render;
 
 
-CURL * handle;
 static char errorBuffer[CURL_ERROR_SIZE];
 std::atomic_bool loop = true;
 std::atomic_int busy = -1;
@@ -88,7 +86,7 @@ struct course{
 
 struct user{
     std::string name;
-    int id;
+    int uid;
     std::vector<course> courses;
 };
 
@@ -104,6 +102,11 @@ size_t write(char * ptr, size_t size, size_t nmemb, std::string * data) {
 
 std::string command(const char * cmd){
     std::string returnv;
+    struct curl_slist *headers = NULL;
+    headers = curl_slist_append(headers, ("Authorization: Bearer "+key).c_str());
+    CURL * handle = curl_easy_init();
+    curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, write);
     curl_easy_setopt(handle, CURLOPT_WRITEDATA, &returnv);
     curl_easy_setopt(handle, CURLOPT_URL, cmd);
     curl_easy_perform(handle);
@@ -187,14 +190,6 @@ course ToCourse(std::string value){
 }
 
 
-size_t userwrite(char * ptr, size_t size, size_t nmemb, user * tuser, int coursenum){
-    std::string returnv;
-    returnv.append(ptr, size * nmemb);
-    tuser->courses[coursenum].assignments.push_back(ToItem(returnv));
-    return size * nmemb;
-}
-
-
 void FirStage(){
     std::string value = splice(command((CourseBase + "courses").c_str()), 1, 1);
     std::vector<std::string> RawCourses;
@@ -221,7 +216,6 @@ void SecondStage(int coursenum, int thread){
     std::string value = "";
     while (true){
         std::string next = splice(command((CourseBase + "courses/" + std::to_string(muser.courses[coursenum].id) + "/assignments?per-page=100&page=" + std::to_string(page)).c_str()), 1, 1);
-
         if (next == ""){
             break;
         }
@@ -252,7 +246,7 @@ void SecondStage(int coursenum, int thread){
         courseitems.push_back(ToItem(RawAssignments[i]));
     }
     while (true){
-        if (busy.load() != -1){
+        if (busy.load() == -1){
             busy.store(thread);
             muser.courses[coursenum].assignments = courseitems;
             std::cout << muser.courses[coursenum].assignments.size() << " assignments in " << muser.courses[coursenum].name << std::endl;
@@ -271,7 +265,8 @@ void CanvasThread(){
     int courses = 0;
     for (int i = 0; i < tcount; i++){
         if (courses < muser.courses.size()){
-            threads.emplace_back(SecondStage, courses);
+            threads.emplace_back(SecondStage, courses, i);
+            courses++;
         }
     }
     while (courses < muser.courses.size()){
@@ -279,14 +274,16 @@ void CanvasThread(){
             if (threads[i].joinable()){
                 threads[i].join();
                 if (courses < muser.courses.size()){
-                    std::thread t(SecondStage, courses, i);
-                    // threads[i] = t;
+                    threads[i] = std::thread(SecondStage, courses, i);
                     courses++;
                 }
             }
         }
     }
-    for (int i = 0; i < muser.courses.size(); i++){
+    for (int i = 0; i < tcount; i++){
+        if (threads[i].joinable()){
+            threads[i].join();
+        }
     }
     std::cout << "Collected all assignments" << std::endl;
 
@@ -316,10 +313,10 @@ int main(int argc, char* argv[]) {
 
     if (os == 1){
         rpath = "./";
-        SDL_SetHint(SDL_HINT_RENDER_DRIVER, "metal");
     }
     elif (os == 2){
         rpath = "../Resources/";
+        SDL_SetHint(SDL_HINT_RENDER_DRIVER, "metal");
     }
 
 
@@ -335,18 +332,15 @@ int main(int argc, char* argv[]) {
     // std::fstream file(stored, std::ios::out);
 
 
-    struct curl_slist *headers = NULL;
-    headers = curl_slist_append(headers, ("Authorization: Bearer "+key).c_str());
     curl_global_init(CURL_GLOBAL_ALL);
-    handle = curl_easy_init();
-    curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
-    curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, write);
 
 
 
     /* Initialize SDL, create window and renderer */
     std::cout << "Initializing SDL3" << std::endl;
     SDL_Init(SDL_INIT_VIDEO);
+    SDL_Window * Window;
+    SDL_Renderer * Render;
     SDL_CreateWindowAndRenderer("Canvas View", windowsize.x, windowsize.y, SDL_WINDOW_RESIZABLE, &Window, &Render);
     SDL_SetWindowMinimumSize(Window, 960, 540);
     SDL_SetRenderVSync(Render, 1);
@@ -496,7 +490,6 @@ int main(int argc, char* argv[]) {
     SDL_DestroyWindow(Window);
     SDL_Quit();
     canvas.join();
-    curl_easy_cleanup(handle);
     return 0;
 }
 

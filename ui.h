@@ -27,8 +27,10 @@ inline ui::ui(SDL_Renderer * Renderer, int rows, int collumns, int width, int ma
     Margin = margin;
     Radius = radius;
 
+
     Corner = SDL_CreateTexture(Renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, radius, radius);
     SDL_SetRenderTarget(Renderer, Corner);
+
 
     SDL_SetRenderDrawColor(Renderer, 0, 0, 0, 0);
     SDL_RenderClear(Renderer);
