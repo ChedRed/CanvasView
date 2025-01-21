@@ -1,9 +1,4 @@
-#include "SDL3/SDL_error.h"
-#include "SDL3/SDL_render.h"
-#include "SDL3/SDL_video.h"
 #include "Vector2.h"
-#include <fstream>
-#include <functional>
 #include <iostream>
 #ifdef _WIN32
 #include <Windows.h>
@@ -46,6 +41,7 @@ static char errorBuffer[CURL_ERROR_SIZE];
 std::atomic_bool loop = true;
 std::atomic_int busy = -1;
 
+std::atomic_bool temp = true;
 
 SDL_Event e;
 bool mainloop = true;
@@ -72,21 +68,21 @@ float now = 0;
 
 struct item{
     std::string name;
-    int id;
+    unsigned long long id;
     std::string stamp;
 };
 
 
 struct course{
     std::string name;
-    int id;
+    unsigned long long id;
     std::vector<item> assignments;
 };
 
 
 struct user{
     std::string name;
-    int uid;
+    unsigned long long uid;
     std::vector<course> courses;
 };
 
@@ -150,6 +146,10 @@ std::string splice(std::string value, int start, int end){
 
 
 item ToItem(std::string value){
+    if (temp.load()){
+        std::cout << value << std::endl;
+        temp.store(false);
+    }
     std::vector<std::string> returnv;
     std::string add;
     int depth = 0;
@@ -162,10 +162,18 @@ item ToItem(std::string value){
         }
         else add += value[i];
     }
-    int id = std::stoi(split(returnv[0], ":", 1)[1]);
+    unsigned long long id;
+    if (split(returnv[0], ":", 1)[0] == "\"id\""){
+        id = std::stoull(split(returnv[0], ":", 1)[1]);
+    }
     std::string name;
     for (int i = 0; i < returnv.size(); i++){
-        if (split(returnv[i], ":", 1)[0] == "\"name\""){
+        if (split(returnv[i], ":", 1)[0] == "\"id\""){
+            if (!id){
+                id = std::stoull(split(returnv[i], ":", 1)[1]);
+            }
+        }
+        elif (split(returnv[i], ":", 1)[0] == "\"name\""){
             name = split(returnv[i], ":", 1)[1];
         }
     }
@@ -186,7 +194,7 @@ course ToCourse(std::string value){
         }
         else add += value[i];
     }
-    return {splice(split(returnv[1], ":", 1)[1], 1, 1), std::stoi(split(returnv[0], ":", 1)[1])};
+    return {splice(split(returnv[1], ":", 1)[1], 1, 1), std::stoull(split(returnv[0], ":", 1)[1])};
 }
 
 
@@ -313,6 +321,7 @@ int main(int argc, char* argv[]) {
 
     if (os == 1){
         rpath = "./";
+        SDL_SetHint(SDL_HINT_RENDER_DRIVER, "vulkan");
     }
     elif (os == 2){
         rpath = "../Resources/";
@@ -333,7 +342,6 @@ int main(int argc, char* argv[]) {
 
 
     curl_global_init(CURL_GLOBAL_ALL);
-
 
 
     /* Initialize SDL, create window and renderer */
@@ -489,6 +497,7 @@ int main(int argc, char* argv[]) {
     SDL_StopTextInput(Window);
     SDL_DestroyWindow(Window);
     SDL_Quit();
+    curl_global_cleanup();
     canvas.join();
     return 0;
 }
